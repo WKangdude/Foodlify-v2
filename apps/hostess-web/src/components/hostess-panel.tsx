@@ -482,7 +482,7 @@ export function HostessPanel() {
               <span className="stat-tag">Listas para recibir</span>
             </div>
             <div className="stat">
-              <span className="stat-icon blue">
+              <span className="stat-icon red">
                 <UtensilsCrossed size={20} />
               </span>
               <div>

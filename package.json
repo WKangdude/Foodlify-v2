@@ -12,7 +12,9 @@
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "dev:kitchen": "npm run dev --workspace=@foodlify/kitchen-web",
-    "build:kitchen": "npm run build --workspace=@foodlify/kitchen-web"
+    "build:kitchen": "npm run build --workspace=@foodlify/kitchen-web",
+    "dev:admin": "npm run dev --workspace=@foodlify/admin-web",
+    "build:admin": "npm run build --workspace=@foodlify/admin-web"
   },
   "engines": {
     "node": ">=22.0.0"

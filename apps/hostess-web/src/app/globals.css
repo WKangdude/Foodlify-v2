@@ -10,7 +10,7 @@
   --green: #26765a;
   --green-dark: #175440;
   --green-light: #edf6f0;
-  --blue: #6a91b2;
+  --occupied: #a94343;
   --amber: #c4973d;
   --violet: #8d80b0;
   --font-body: "DM Sans Variable", Arial, sans-serif;
@@ -513,9 +513,9 @@ main {
   color: #438666;
   background: #eef6ee;
 }
-.blue {
-  color: #789bb3;
-  background: #eff5f9;
+.red {
+  color: var(--occupied);
+  background: #fceeee;
 }
 .violet {
   color: #9d8fb6;
@@ -891,19 +891,19 @@ main {
   white-space: nowrap;
 }
 .occupied {
-  color: #6c8ca8;
+  color: var(--occupied);
 }
 .occupied .table-surface {
-  background: #eaf1f8;
-  border-color: #a9c1d7;
-  box-shadow: 0 2px 0 #d8e3ee;
+  background: #fceeee;
+  border-color: #dfa4a4;
+  box-shadow: 0 2px 0 #f0cece;
 }
 .occupied .chair {
-  background: #dfe9f3;
-  border-color: #b4c9dc;
+  background: #f4dada;
+  border-color: #dfa4a4;
 }
 .occupied .table-caption {
-  color: #9baebd;
+  color: var(--occupied);
 }
 .pending {
   color: #b5944d;
@@ -1017,7 +1017,7 @@ main {
   background: #9eba94;
 }
 .legend-dot.occupied {
-  background: #9bb6ce;
+  background: var(--occupied);
 }
 .legend-dot.pending {
   background: #d8bd77;
@@ -1111,8 +1111,8 @@ main {
   background: #eef6e9;
 }
 .badge.occupied {
-  color: #7899b3;
-  background: #edf4f9;
+  color: var(--occupied);
+  background: #fceeee;
 }
 .badge.pending {
   color: #b69958;
@@ -1463,6 +1463,11 @@ main {
 }
 .list-table-icon.available {
   color: #7d9d71;
+}
+.list-table-icon.occupied,
+.detail-table-icon.occupied {
+  color: var(--occupied);
+  background: #fceeee;
 }
 .empty-state {
   position: absolute;
@@ -2569,12 +2574,11 @@ fieldset > p {
   color: #667b6c;
 }
 .table-caption,
-.occupied .table-caption,
 .pending .table-caption {
   color: #637962;
 }
 .table-position.occupied {
-  color: #436b8b;
+  color: var(--occupied);
 }
 .table-position.pending {
   color: #816826;
@@ -2592,7 +2596,7 @@ fieldset > p {
   color: #4b7044;
 }
 .badge.occupied {
-  color: #466e8c;
+  color: var(--occupied);
 }
 .badge.pending {
   color: #816626;
