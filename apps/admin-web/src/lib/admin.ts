@@ -46,7 +46,9 @@ export function validateEmployee(state: AdminState, employee: Employee): string 
 }
 export function parseState(raw: string): AdminState {
   const value = JSON.parse(raw) as AdminState;
-  if (value.version !== 1 || !value.business || typeof value.business.name !== "string" || !Array.isArray(value.branches) || !Array.isArray(value.employees) || !Array.isArray(value.activity)) throw new Error("Datos incompatibles");
+  if (!value || value.version !== 1 || !value.business || ![value.business.name, value.business.email, value.business.currency, value.business.timezone].every(field => typeof field === "string") || !Array.isArray(value.branches) || value.branches.length === 0 || !Array.isArray(value.employees) || !Array.isArray(value.activity)) throw new Error("Datos incompatibles");
+  new Intl.DateTimeFormat("es-MX", { timeZone: value.business.timezone });
+  if (!value.activity.every(a => a && typeof a.id === "string" && typeof a.text === "string" && typeof a.at === "string" && Number.isFinite(Date.parse(a.at)))) throw new Error("Datos incompatibles");
   if (!value.branches.every(b => typeof b.id === "string" && typeof b.name === "string" && typeof b.address === "string" && typeof b.hours === "string" && typeof b.active === "boolean") || !value.employees.every(e => typeof e.id === "string" && typeof e.name === "string" && typeof e.email === "string" && roles.includes(e.role) && value.branches.some(b => b.id === e.branch) && ["Activo", "Invitación pendiente", "Suspendido"].includes(e.status))) throw new Error("Datos incompatibles");
   return value;
 }

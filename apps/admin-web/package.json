@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --hostname 0.0.0.0 --port 3003",
+    "dev": "next dev --hostname 0.0.0.0 --port 3004",
     "build": "next build",
-    "start": "next start --hostname 0.0.0.0 --port 3003",
+    "start": "next start --hostname 0.0.0.0 --port 3004",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "node --import tsx --test src/lib/admin.test.ts"

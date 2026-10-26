@@ -1,0 +1,63 @@
+name: foodlify-integration
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: foodlify
+      POSTGRES_PASSWORD: ${PG_PASSWORD:?Run setup:local first}
+      POSTGRES_DB: integration
+    ports: ["127.0.0.1:5433:5432"]
+    volumes: ["integration-postgres:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U foodlify -d integration"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  rabbitmq:
+    image: rabbitmq:4.3-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?Run setup:local first}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Run setup:local first}
+    ports: ["127.0.0.1:5673:5672", "127.0.0.1:15673:15672"]
+    volumes:
+      - integration-rabbitmq:/var/lib/rabbitmq
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  integration:
+    build:
+      context: ../..
+      dockerfile: services/integration/Dockerfile
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      DATABASE_URL: postgresql://foodlify:${PG_PASSWORD}@postgres:5432/integration
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+    ports: ["127.0.0.1:3010:3010"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    init: true
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3010/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  migrate:
+    build:
+      context: ../..
+      dockerfile: services/integration/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://foodlify:${PG_PASSWORD}@postgres:5432/integration
+    command: ["node", "dist/migrate.js"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    profiles: ["tools"]
+volumes:
+  integration-postgres:
+  integration-rabbitmq:

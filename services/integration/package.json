@@ -1,0 +1,37 @@
+{
+  "name": "@foodlify/integration",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file=.env src/main.ts",
+    "start": "node --env-file=.env dist/main.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.test.json",
+    "test": "node --import tsx --test test/*.test.ts",
+    "migrate": "node --import tsx --env-file=.env src/migrate.ts",
+    "setup:local": "node scripts/setup-local.mjs",
+    "send:http": "node --env-file=.env scripts/send-http.mjs",
+    "send:broker": "node --import tsx --env-file=.env scripts/send-broker.ts"
+  },
+  "dependencies": {
+    "@nestjs/common": "^12.2.0",
+    "@nestjs/core": "^12.2.0",
+    "@nestjs/platform-express": "^12.2.0",
+    "amqplib": "^0.10.9",
+    "express": "^5.1.0",
+    "libxml2-wasm": "0.7.2",
+    "pg": "^8.16.3",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.11",
+    "@types/amqplib": "^0.10.7",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.15.5",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}

@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cartTotal, itemPrice, readCart, type CartItem } from "./menu";
+import {
+  cartTotal as total,
+  itemPrice as price,
+  readCart as restore,
+  type CartItem,
+} from "./menu";
+import { products } from "./menu-fixtures";
+const cartTotal = (items: CartItem[]) => total(items, products);
+const itemPrice = (item: CartItem) => price(item, products);
+const readCart = (value: string | null) => restore(value, products);
 
 const item: CartItem = {
   id: "line-1",
@@ -47,4 +56,12 @@ test("descarta datos dañados, cantidades inválidas y productos no disponibles"
     null,
   ];
   assert.deepEqual(readCart(JSON.stringify([...invalid, item])), [item]);
+});
+
+test("un catálogo recibido del servidor reemplaza los precios del prototipo", () => {
+  const catalog = products.map((p) =>
+    p.id === "pasta" ? { ...p, price: 10000 } : p,
+  );
+  assert.equal(total([item], catalog), 38000);
+  assert.deepEqual(restore(JSON.stringify([item]), []), []);
 });

@@ -2,7 +2,8 @@
   "name": "foodlify-v2",
   "private": true,
   "workspaces": [
-    "apps/*"
+    "apps/*",
+    "services/*"
   ],
   "scripts": {
     "dev": "npm run dev --workspace=@foodlify/hostess-web",
@@ -14,9 +15,20 @@
     "dev:kitchen": "npm run dev --workspace=@foodlify/kitchen-web",
     "build:kitchen": "npm run build --workspace=@foodlify/kitchen-web",
     "dev:admin": "npm run dev --workspace=@foodlify/admin-web",
-    "build:admin": "npm run build --workspace=@foodlify/admin-web"
+    "build:admin": "npm run build --workspace=@foodlify/admin-web",
+    "dev:cashier": "npm run dev --workspace=@foodlify/cashier-web",
+    "build:cashier": "npm run build --workspace=@foodlify/cashier-web",
+    "dev:integration": "npm run dev --workspace=@foodlify/integration",
+    "build:integration": "npm run build --workspace=@foodlify/integration",
+    "test:integration": "npm run test --workspace=@foodlify/integration",
+    "migrate:integration": "npm run migrate --workspace=@foodlify/integration"
   },
   "engines": {
     "node": ">=22.0.0"
+  },
+  "overrides": {
+    "@nestjs/platform-express": {
+      "multer": "^2.5.0"
+    }
   }
 }

@@ -2,7 +2,7 @@
 
 import { MenuImage } from "@/components/menu-image";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -24,19 +24,25 @@ import {
   X,
 } from "lucide-react";
 import {
-  cartTotal,
-  categories,
-  itemPrice,
+  cartTotal as calculateTotal,
+  itemPrice as calculatePrice,
   money,
-  products,
-  readCart,
+  readCart as restoreCart,
   type CartItem,
   type Category,
   type Product,
 } from "@/lib/menu";
 
-const STORAGE_KEY = "foodlify:menu:v1:el-olivo:roma:demo";
-type Order = { id: string; items: CartItem[]; total: number };
+import {
+  menuRequest,
+  MenuRequestError,
+  readPendingOrder,
+  type MenuCatalog,
+  type MenuSession,
+  type SavedOrder,
+  type SessionState,
+  type PendingOrder,
+} from "@/lib/menu-backend";
 type Panel = "cart" | "bill" | "help" | "filters" | null;
 
 function Dialog({
@@ -80,14 +86,35 @@ function Dialog({
   );
 }
 
-export function DinerMenu() {
+export function DinerMenu({ catalog }: { catalog: MenuCatalog }) {
+  const products = catalog.products;
+  const categories = catalog.categories;
+  const cartTotal = useCallback(
+    (items: CartItem[]) => calculateTotal(items, products),
+    [products],
+  );
+  const itemPrice = useCallback(
+    (item: CartItem) => calculatePrice(item, products),
+    [products],
+  );
+  const readCart = useCallback(
+    (value: string | null) => restoreCart(value, products),
+    [products],
+  );
+  const [session, setSession] = useState<MenuSession | null>(null);
+  const [storageKey, setStorageKey] = useState("");
+  const [pendingOrder, setPendingOrder] = useState<PendingOrder | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [backendError, setBackendError] = useState("");
+  const submitLock = useRef(false);
+
   const [category, setCategory] = useState<Category>("Todos");
   const [query, setQuery] = useState("");
   const [vegetarian, setVegetarian] = useState(false);
   const [onlyFavorites, setOnlyFavorites] = useState(false);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<SavedOrder[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [online, setOnline] = useState(true);
   const [storageError, setStorageError] = useState(false);
@@ -99,52 +126,161 @@ export function DinerMenu() {
   const [notice, setNotice] = useState("");
 
   useEffect(() => {
-    // Restore after hydration so the server and initial browser markup match.
-    Promise.resolve().then(() => {
+    let active = true;
+    async function restore() {
+      let data: SessionState | null = null;
       try {
-        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
-        setCart(readCart(JSON.stringify(saved?.cart)));
-        if (Array.isArray(saved?.favorites))
-          setFavorites(
-            saved.favorites.filter((id: unknown) =>
-              products.some((p) => p.id === id),
-            ),
+        const url = new URL(window.location.href);
+        const qrToken = url.searchParams.get("qr");
+        if (qrToken) {
+          url.searchParams.delete("qr");
+          window.history.replaceState(
+            null,
+            "",
+            url.pathname + url.search + url.hash,
           );
-        if (Array.isArray(saved?.orders))
-          setOrders(
-            saved.orders.flatMap((order: Order) => {
-              const items = readCart(JSON.stringify(order?.items));
-              return items.length && typeof order?.id === "string"
-                ? [{ id: order.id, items, total: cartTotal(items) }]
-                : [];
-            }),
+          await menuRequest("sessions", {
+            method: "POST",
+            body: JSON.stringify({ qrToken }),
+          });
+        }
+        data = await menuRequest<SessionState>("session");
+        if (data.session.branchId !== catalog.branch.id) {
+          data = null;
+          throw new Error(
+            "El QR pertenece a otra sucursal. Abre el enlace completo que te compartió el restaurante.",
           );
+        }
+      } catch (error) {
+        if (
+          active &&
+          !(
+            error instanceof MenuRequestError &&
+            error.code === "INVALID_SESSION"
+          )
+        )
+          setBackendError(
+            error instanceof Error
+              ? error.message
+              : "No pudimos recuperar tu sesión.",
+          );
+      }
+      if (!active) return;
+      const key = `foodlify:menu:v2:${catalog.branch.id}:${data?.session.id ?? "browse"}`;
+      setSession(data?.session ?? null);
+      setOrders(data?.orders ?? []);
+      let saved: {
+        cart?: unknown;
+        favorites?: unknown;
+        pendingOrder?: unknown;
+      } | null = null;
+      try {
+        saved = JSON.parse(localStorage.getItem(key) ?? "null");
       } catch {
         setStorageError(true);
       }
+      const pending = readPendingOrder(saved?.pendingOrder);
+      const recovered =
+        !!pending &&
+        data?.orders.some((o) => o.idempotencyKey === pending.idempotencyKey);
+      setCart(
+        recovered
+          ? []
+          : (pending?.items ?? readCart(JSON.stringify(saved?.cart))),
+      );
+      setPendingOrder(recovered ? null : pending);
+      setFavorites(
+        data?.preferences.favorites ??
+          (Array.isArray(saved?.favorites)
+            ? saved.favorites.filter(
+                (id): id is string =>
+                  typeof id === "string" && products.some((p) => p.id === id),
+              )
+            : []),
+      );
+      setVegetarian(data?.preferences.vegetarian ?? false);
+      setStorageKey(key);
       setHydrated(true);
       setOnline(navigator.onLine);
-    });
+    }
+    void restore();
     const connected = () => setOnline(true);
     const disconnected = () => setOnline(false);
     window.addEventListener("online", connected);
     window.addEventListener("offline", disconnected);
     return () => {
+      active = false;
       window.removeEventListener("online", connected);
       window.removeEventListener("offline", disconnected);
     };
-  }, []);
+  }, [catalog.branch.id, products, readCart]);
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || !storageKey) return;
     try {
       localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ cart, favorites, orders }),
+        storageKey,
+        JSON.stringify({ cart, favorites, pendingOrder }),
       );
     } catch {
       queueMicrotask(() => setStorageError(true));
     }
-  }, [cart, favorites, orders, hydrated]);
+  }, [cart, favorites, pendingOrder, hydrated, storageKey]);
+  useEffect(() => {
+    if (!session || !hydrated || !online) return;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      void menuRequest("preferences", {
+        method: "PUT",
+        body: JSON.stringify({ favorites, vegetarian }),
+        signal: controller.signal,
+      }).catch((error) => {
+        if (!controller.signal.aborted)
+          setNotice(
+            error instanceof Error
+              ? error.message
+              : "No pudimos guardar tus preferencias.",
+          );
+      });
+    }, 600);
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [session, hydrated, online, favorites, vegetarian]);
+  useEffect(() => {
+    if (!session) return;
+    let active = true;
+    async function refresh() {
+      if (document.hidden || !navigator.onLine) return;
+      try {
+        const data = await menuRequest<SessionState>("session");
+        if (active) {
+          setOrders(data.orders);
+          setBackendError("");
+        }
+      } catch (error) {
+        if (active) {
+          setBackendError(
+            error instanceof Error
+              ? error.message
+              : "No pudimos actualizar tus pedidos.",
+          );
+          if (error instanceof MenuRequestError && error.status === 401)
+            setSession(null);
+        }
+      }
+    }
+    const interval = setInterval(() => void refresh(), 15000);
+    const visible = () => void refresh();
+    document.addEventListener("visibilitychange", visible);
+    window.addEventListener("online", visible);
+    return () => {
+      active = false;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", visible);
+      window.removeEventListener("online", visible);
+    };
+  }, [session]);
   useEffect(() => {
     if (!notice) return;
     const timeout = setTimeout(() => setNotice(""), 3500);
@@ -169,7 +305,10 @@ export function DinerMenu() {
   );
   const count = cart.reduce((sum, item) => sum + item.quantity, 0);
   const total = cartTotal(cart);
-  const billTotal = orders.reduce((sum, order) => sum + order.total, 0);
+  const billTotal = orders
+    .filter((o) => !["rejected", "cancelled"].includes(o.status))
+    .reduce((sum, order) => sum + order.total, 0);
+  const latest = orders.at(-1);
   function openProduct(p: Product) {
     setProduct(p);
     setExtraIds([]);
@@ -177,7 +316,7 @@ export function DinerMenu() {
     setNote("");
   }
   function addProduct() {
-    if (!product?.available) return;
+    if (!product?.available || pendingOrder || submitting) return;
     setCart((current) => [
       ...current,
       {
@@ -192,6 +331,7 @@ export function DinerMenu() {
     setNotice(`${product.name} se agregó a tu pedido`);
   }
   function changeQuantity(id: string, delta: number) {
+    if (pendingOrder || submitting) return;
     setCart((current) =>
       current.flatMap((item) =>
         item.id !== id
@@ -202,22 +342,67 @@ export function DinerMenu() {
       ),
     );
   }
-  function simulateOrder() {
-    if (!cart.length || !online || !hydrated) return;
-    setOrders((current) => [
-      ...current,
-      { id: crypto.randomUUID(), items: cart, total },
-    ]);
-    setCart([]);
-    setPanel("bill");
+  async function submitOrder() {
+    if (!cart.length || !online || !hydrated || !session || submitLock.current)
+      return;
+    submitLock.current = true;
+    setSubmitting(true);
+    setBackendError("");
+    const attempt = pendingOrder ?? {
+      idempotencyKey: crypto.randomUUID(),
+      items: cart,
+      expectedTotal: total,
+    };
+    setPendingOrder(attempt);
+    try {
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify({ cart, favorites, pendingOrder: attempt }),
+      );
+    } catch {
+      setStorageError(true);
+    }
+    try {
+      const { order } = await menuRequest<{ order: SavedOrder }>("orders", {
+        method: "POST",
+        body: JSON.stringify(attempt),
+        signal: AbortSignal.timeout(20000),
+      });
+      setOrders((current) => [
+        ...current.filter((o) => o.id !== order.id),
+        order,
+      ]);
+      setCart([]);
+      setPendingOrder(null);
+      setPanel("bill");
+      setNotice("Pedido guardado en el restaurante. Pendiente de entrega.");
+    } catch (error) {
+      if (
+        error instanceof MenuRequestError &&
+        [400, 401, 403, 409, 429].includes(error.status) &&
+        error.code !== "IDEMPOTENCY_CONFLICT"
+      )
+        setPendingOrder(null);
+      if (error instanceof MenuRequestError && error.status === 401)
+        setSession(null);
+      setBackendError(
+        error instanceof MenuRequestError
+          ? error.message
+          : "No pudimos confirmar el resultado. Reintenta el mismo envío: no se duplicará tu pedido.",
+      );
+    } finally {
+      submitLock.current = false;
+      setSubmitting(false);
+    }
   }
   const cartContent = (
     <>
       <div className="order-table">
         <span>
-          <UtensilsCrossed size={16} /> Mesa de ejemplo 08
+          <UtensilsCrossed size={16} />{" "}
+          {session ? `Mesa ${session.tableLabel}` : "Explorar menú"}
         </span>
-        <span>Salón principal</span>
+        <span>{session?.areaLabel ?? catalog.branch.name}</span>
       </div>
       {cart.length ? (
         <div className="cart-items">
@@ -246,6 +431,7 @@ export function DinerMenu() {
                   <div className="cart-item-bottom">
                     <div className="stepper small">
                       <button
+                        disabled={!!pendingOrder || submitting}
                         aria-label={`Quitar una unidad de ${p.name}`}
                         onClick={() => changeQuantity(item.id, -1)}
                       >
@@ -253,7 +439,9 @@ export function DinerMenu() {
                       </button>
                       <span>{item.quantity}</span>
                       <button
-                        disabled={item.quantity >= 20}
+                        disabled={
+                          item.quantity >= 20 || !!pendingOrder || submitting
+                        }
                         aria-label={`Agregar una unidad de ${p.name}`}
                         onClick={() => changeQuantity(item.id, 1)}
                       >
@@ -294,13 +482,22 @@ export function DinerMenu() {
         <p className="tax-note">Precios en MXN. IVA incluido.</p>
         <button
           className="primary"
-          disabled={!cart.length || !online || !hydrated}
-          onClick={simulateOrder}
+          disabled={
+            !cart.length || !online || !hydrated || !session || submitting
+          }
+          onClick={() => void submitOrder()}
         >
-          Simular pedido <ArrowRight size={18} />
+          {submitting
+            ? "Guardando pedido..."
+            : pendingOrder
+              ? "Reintentar envío"
+              : "Confirmar pedido"}{" "}
+          <ArrowRight size={18} />
         </button>
         <p className="demo-copy">
-          Vista de demostración. No se envía a cocina.
+          {session
+            ? "Guardamos tu pedido antes de enviarlo. La recepción por cocina se confirma por separado."
+            : "Escanea el QR de tu mesa para poder pedir."}
         </p>
       </div>
     </>
@@ -309,28 +506,41 @@ export function DinerMenu() {
   return (
     <>
       <header className="site-header">
-        <Link className="brand" href="/" aria-label="El Olivo, inicio">
+        <Link
+          className="brand"
+          href={`/?branch=${catalog.branch.slug}`}
+          aria-label={`${catalog.branch.businessName}, inicio`}
+        >
           <span className="brand-mark">
             <Sprout size={28} strokeWidth={1.6} />
           </span>
           <span>
-            el olivo<span className="brand-caption">cocina de temporada</span>
+            {catalog.branch.businessName.toLocaleLowerCase("es-MX")}
+            <span className="brand-caption">{catalog.branch.tagline}</span>
           </span>
         </Link>
         <div className="header-right">
           <span className="location">
-            <MapPin size={16} /> Roma Norte, CDMX
+            <MapPin size={16} /> {catalog.branch.location}
           </span>
           <button className="table-pill" onClick={() => setPanel("help")}>
-            <span className="status-dot" /> Mesa de ejemplo 08{" "}
+            <span className="status-dot" />{" "}
+            {session ? `Mesa ${session.tableLabel}` : "Explorar menú"}{" "}
             <ChevronRight size={15} />
           </button>
         </div>
       </header>
       <div className="demo-banner">
-        Estás explorando un menú de demostración.{" "}
-        <span>Los pedidos y la mesa son de ejemplo.</span>
+        {session
+          ? `Bienvenido a ${catalog.branch.businessName}. Estás en la mesa ${session.tableLabel}.`
+          : "Explora nuestro menú. Escanea el código QR de tu mesa para hacer tu pedido."}
       </div>
+      {backendError && (
+        <div className="connection-banner" role="alert">
+          {backendError}
+          <a href={`/?branch=${catalog.branch.slug}`}>Actualizar menú</a>
+        </div>
+      )}
       {!online && (
         <div className="connection-banner" role="status">
           <WifiOff size={17} /> Sin conexión. Puedes explorar el menú; tu
@@ -454,7 +664,9 @@ export function DinerMenu() {
                     ? "Para disfrutar, a tu manera"
                     : category}
             </h2>
-            <span>{visible.length} {visible.length === 1 ? "platillo" : "platillos"}</span>
+            <span>
+              {visible.length} {visible.length === 1 ? "platillo" : "platillos"}
+            </span>
           </div>
           {visible.length ? (
             <div className="product-grid">
@@ -534,7 +746,7 @@ export function DinerMenu() {
                       </strong>
                       <button
                         className="add-button"
-                        disabled={!p.available}
+                        disabled={!p.available || !!pendingOrder || submitting}
                         aria-label={`Agregar ${p.name}`}
                         onClick={() => openProduct(p)}
                       >
@@ -574,7 +786,7 @@ export function DinerMenu() {
             </p>
           </div>
           <footer className="menu-footer">
-            <span>Preparado con cariño en El Olivo.</span>
+            <span>Preparado con cariño en {catalog.branch.businessName}.</span>
             <span className="powered">
               Menú por{" "}
               <strong>
@@ -601,7 +813,7 @@ export function DinerMenu() {
               <strong>Tu cuenta</strong>
               <small>
                 {orders.length
-                  ? `${orders.length} pedido(s) de ejemplo · ${money(billTotal)}`
+                  ? `${orders.length} pedido(s) · ${money(billTotal)}`
                   : "Consulta lo que has pedido"}
               </small>
             </span>
@@ -719,7 +931,7 @@ export function DinerMenu() {
             <button
               className="primary"
               onClick={addProduct}
-              disabled={!product.available}
+              disabled={!product.available || !!pendingOrder || submitting}
             >
               {product.available
                 ? `Agregar · ${money((product.price + product.extras.filter((e) => extraIds.includes(e.id)).reduce((sum, e) => sum + e.price, 0)) * quantity)}`
@@ -761,18 +973,23 @@ export function DinerMenu() {
           <div className="help-mark">
             <UtensilsCrossed size={35} />
           </div>
-          <h3 className="help-title">Bienvenido a El Olivo</h3>
+          <h3 className="help-title">
+            Bienvenido a {catalog.branch.businessName}
+          </h3>
           <p className="detail-description">
-            Esta es una vista de demostración de la sucursal Roma Norte. Para
-            pedir ayuda, consulta directamente al personal del restaurante.
+            Estás en {catalog.branch.name}. Para pedir ayuda, consulta
+            directamente al personal del restaurante.
           </p>
           <div className="info-box">
             <MapPin size={18} />
             <div>
-              <strong>Mesa de ejemplo 08</strong>
+              <strong>
+                {session ? `Mesa ${session.tableLabel}` : "Explorar menú"}
+              </strong>
               <p>
-                La sesión real de tu mesa se habilitará al conectar la
-                validación del código QR.
+                {session
+                  ? "Tu sesión está vinculada a esta visita y tiene una vigencia limitada."
+                  : "Escanea el código QR de tu mesa para iniciar una sesión y pedir."}
               </p>
             </div>
           </div>
@@ -782,72 +999,83 @@ export function DinerMenu() {
         </Dialog>
       )}
       {panel === "bill" && (
-        <Dialog title="Tu cuenta de ejemplo" close={() => setPanel(null)}>
+        <Dialog title="Tus pedidos" close={() => setPanel(null)}>
           {orders.length ? (
             <>
               <div className="info-box">
                 <Clock3 size={20} />
                 <div>
-                  <strong>Pedido guardado en este dispositivo</strong>
+                  <strong>
+                    {latest?.status === "accepted_by_kitchen"
+                      ? "Pedido aceptado por cocina"
+                      : "Pedido guardado en el restaurante"}
+                  </strong>
                   <p>
-                    Es una simulación. No se ha enviado ni ha sido aceptado por
-                    cocina.
+                    {latest?.status === "accepted_by_kitchen"
+                      ? "La cocina confirmó la recepción de tu pedido."
+                      : "Consulta el estado de cada pedido. Guardado no significa aceptado por cocina."}
                   </p>
                 </div>
               </div>
               <ol className="order-progress">
                 <li className="done">
-                  <Check size={15} /> Guardado local
+                  <Check size={15} /> Guardado en Supabase
                 </li>
                 <li>
                   <Clock3 size={15} /> Pendiente de entrega
                 </li>
-                <li>
+                <li
+                  className={
+                    latest?.status === "accepted_by_kitchen" ? "done" : ""
+                  }
+                >
                   <UtensilsCrossed size={15} /> Aceptado por cocina
                 </li>
               </ol>
               {orders.map((order, index) => (
                 <section className="bill-order" key={order.id}>
-                  <h3>Pedido de ejemplo {index + 1}</h3>
+                  <h3>Pedido {index + 1}</h3>
+                  <p className="order-status">
+                    {
+                      {
+                        pending_delivery: "Pendiente de entrega a Pedidos",
+                        accepted_by_orders:
+                          "Aceptado por Pedidos; esperando cocina",
+                        accepted_by_kitchen: "Aceptado por cocina",
+                        rejected: "Rechazado",
+                        cancelled: "Cancelado",
+                      }[order.status]
+                    }
+                  </p>
                   {order.items.map((item) => (
                     <div className="bill-line" key={item.id}>
                       <span>
-                        {item.quantity} ×{" "}
-                        {products.find((p) => p.id === item.productId)?.name}
+                        {item.quantity} × {item.productName}
                       </span>
-                      <strong>{money(itemPrice(item) * item.quantity)}</strong>
+                      <strong>{money(item.unitPrice * item.quantity)}</strong>
                     </div>
                   ))}
                 </section>
               ))}
               <div className="total-line bill-total">
-                <strong>Total de ejemplo</strong>
+                <strong>Total de tus pedidos</strong>
                 <strong>{money(billTotal)}</strong>
               </div>
               <p className="tax-note">
-                MXN · IVA incluido. Los importes requieren validación del
-                restaurante.
+                MXN · IVA incluido. El precio de cada pedido se conserva al
+                guardarlo.
               </p>
               <p className="demo-copy payment-note">
                 El pago estará disponible según la configuración del restaurante
                 cuando se conecte el servicio de caja.
               </p>
-              <button
-                className="text-button"
-                onClick={() => {
-                  setOrders([]);
-                  setPanel(null);
-                }}
-              >
-                Limpiar cuenta de ejemplo
-              </button>
             </>
           ) : (
             <div className="empty-cart">
               <ShoppingBag size={32} />
               <h3>Tu mesa empieza aquí</h3>
               <p>
-                Aún no tienes pedidos de ejemplo.
+                Aún no tienes pedidos guardados.
                 <br />
                 Explora el menú y encuentra algo rico.
               </p>

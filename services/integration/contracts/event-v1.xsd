@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:foodlify:integration:v1"
+           xmlns="urn:foodlify:integration:v1" elementFormDefault="qualified">
+  <xs:simpleType name="Identifier">
+    <xs:restriction base="xs:string">
+      <xs:minLength value="1"/><xs:maxLength value="128"/>
+      <xs:pattern value="[A-Za-z0-9][A-Za-z0-9_.:-]*"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="Event">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="Payload">
+          <xs:complexType>
+            <xs:sequence><xs:any minOccurs="1" maxOccurs="1" processContents="skip"/></xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+      <xs:attribute name="eventId" type="Identifier" use="required"/>
+      <xs:attribute name="eventType" type="Identifier" use="required"/>
+      <xs:attribute name="schemaVersion" use="required" fixed="1"/>
+      <xs:attribute name="tenantId" type="Identifier" use="required"/>
+      <xs:attribute name="branchId" type="Identifier" use="required"/>
+      <xs:attribute name="source" type="Identifier" use="required"/>
+      <xs:attribute name="occurredAt" type="xs:dateTime" use="required"/>
+      <xs:attribute name="correlationId" type="Identifier" use="required"/>
+      <xs:attribute name="causationId" type="Identifier"/>
+      <xs:attribute name="aggregateId" type="Identifier" use="required"/>
+      <xs:attribute name="aggregateVersion" type="xs:positiveInteger" use="required"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

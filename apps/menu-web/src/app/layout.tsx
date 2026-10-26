@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "El Olivo · Menú | Foodlify",
+  title: "Menú | Foodlify",
   description:
     "Descubre el menú, personaliza tus platillos y prepara tu pedido desde tu mesa.",
 };

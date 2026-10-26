@@ -1,0 +1,5 @@
+project_id = "foodlify-menu"
+
+[functions.menu-api]
+# Supabase verifies its gateway JWT. The handler additionally validates QR/session capabilities.
+verify_jwt = true

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Event xmlns="urn:foodlify:integration:v1"
+       eventId="evt-order-001" eventType="OrderPlaced" schemaVersion="1"
+       tenantId="demo" branchId="main" source="orders"
+       occurredAt="2026-10-26T02:00:00Z" correlationId="corr-order-001"
+       aggregateId="order-001" aggregateVersion="1">
+  <Payload>
+    <OrderPlaced xmlns="urn:foodlify:orders:v1">
+      <VisitId>visit-001</VisitId>
+      <TableId>table-10</TableId>
+      <Items>
+        <Item lineId="line-001">
+          <ProductId>hamburger</ProductId>
+          <Name>Hamburguesa</Name>
+          <Quantity>1</Quantity>
+          <UnitPrice currency="MXN">150.00</UnitPrice>
+          <Notes>Sin cebolla</Notes>
+        </Item>
+      </Items>
+    </OrderPlaced>
+  </Payload>
+</Event>
