@@ -63,7 +63,7 @@ No copiar la base de datos compartida ni trasladar íntegramente las Server Acti
 Cada aplicación de negocio tiene una API o backend propietario y su base de datos, con sus tablas `message_outbox`, `message_inbox`, `message_hospital` y `message_hospital_attempt`. Los frontends estáticos no guardan mensajes ni se conectan al broker: su backend es responsable de estas tablas. Pedidos puede comenzar sin interfaz independiente; sus actividades frontend son los flujos que expone en otras apps.
 
 - Monorepo con compilación, despliegue y rollback independientes por aplicación.
-- Frontends React/TypeScript; conservar Next.js donde aporte valor. Backend TypeScript con un framework común, propuesto NestJS. Ratificar versiones y compatibilidad antes de implementar.
+- Frontends con Next.js App Router y TypeScript en todas las aplicaciones, conforme a la decisión de implementación. Backend TypeScript con un framework común, propuesto NestJS. Ratificar versiones y compatibilidad antes de implementar cada servicio.
 - PostgreSQL por dominio; Prisma puede mantenerse con un esquema y migraciones por servicio.
 - RabbitMQ para transporte AMQP de mensajes XML, con colas separadas por destinatario y procesamiento persistente.
 - Socket.IO o SSE entre backend y navegador; API de recuperación al reconectar.

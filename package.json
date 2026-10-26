@@ -1,0 +1,20 @@
+{
+  "name": "foodlify-v2",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=@foodlify/hostess-web",
+    "dev:menu": "npm run dev --workspace=@foodlify/menu-web",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "dev:kitchen": "npm run dev --workspace=@foodlify/kitchen-web",
+    "build:kitchen": "npm run build --workspace=@foodlify/kitchen-web"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
